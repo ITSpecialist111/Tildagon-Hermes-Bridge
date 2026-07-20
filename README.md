@@ -8,9 +8,13 @@ Hermes Bridge lets a local [Hermes Agent](https://github.com/NousResearch/hermes
 
 ## Install from the Tildagon App Store
 
+Hermes Bridge is listed at
+[apps.badge.emfcamp.org/apps/32234323](https://apps.badge.emfcamp.org/apps/32234323/)
+with install code **`32234323`**.
+
 1. Connect the badge to Wi-Fi.
-2. Open **App Store > Browse Apps > Apps**.
-3. Select **Hermes Bridge** and install it.
+2. Open **App Store > Use Code** (called **CodeInstall** on older firmware).
+3. Enter `32234323` and install **Hermes Bridge**.
 
 The App Store discovers this public repository through the `tildagon-app` topic. New releases normally appear within 15 minutes.
 
