@@ -1,0 +1,24 @@
+{
+  "app": {
+    "name": "Hermes Bridge",
+    "category": [
+      "Apps"
+    ]
+  },
+  "metadata": {
+    "author": "Graham Hosking",
+    "license": "MIT",
+    "url": "https://github.com/ITSpecialist111/Tildagon-Hermes-Bridge",
+    "description": "Locally armed, PIN-authenticated app deployment bridge for Hermes Agent on private LANs.",
+    "version": "0.4.0",
+    "capabilities": [
+      {
+        "required": true,
+        "feature": {
+          "type": "TildagonOSMinimumVersion",
+          "version": "2.0.0"
+        }
+      }
+    ]
+  }
+}
