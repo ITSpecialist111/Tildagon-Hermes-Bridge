@@ -1,4 +1,5 @@
 import json
+import select
 import socket
 import time
 
@@ -29,12 +30,6 @@ except ImportError:
 
 DEPLOY_PORT = 8267
 DEPLOY_TIMEOUT_SECONDS = 15
-_active_bridge = None
-
-
-def deployment_accept_handler(listen_sock):
-    if _active_bridge is not None:
-        _active_bridge._accept_deployment(listen_sock)
 
 
 class HermesBridgeApp(app.App):
@@ -46,6 +41,7 @@ class HermesBridgeApp(app.App):
         self.pairing_pin = load_pairing_pin()
         self.status = "Press C to arm"
         self.deploy_listener = None
+        self.deploy_poller = None
 
     @staticmethod
     def _send_http(client, status, payload):
@@ -59,6 +55,8 @@ class HermesBridgeApp(app.App):
 
     def _accept_deployment(self, listen_sock):
         client, remote_address = listen_sock.accept()
+        client.setblocking(True)
+        client.settimeout(DEPLOY_TIMEOUT_SECONDS)
         remote_ip = remote_address[0]
         should_reset = False
         try:
@@ -66,7 +64,6 @@ class HermesBridgeApp(app.App):
                 self._send_http(client, 403, {"ok": False, "error": "source is outside trusted LAN"})
                 return
 
-            client.settimeout(DEPLOY_TIMEOUT_SECONDS)
             stream = client.makefile("rwb", 0)
             request_line = stream.readline()
             if len(request_line) > 1024:
@@ -147,15 +144,32 @@ class HermesBridgeApp(app.App):
                 machine.reset()
 
     def _start_deployment_server(self):
-        global _active_bridge
-        _active_bridge = self
         listener = socket.socket()
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listener.bind(("0.0.0.0", DEPLOY_PORT))
         listener.listen(1)
-        listener.setsockopt(socket.SOL_SOCKET, 20, deployment_accept_handler)
+        listener.setblocking(False)
+        poller = select.poll()
+        poller.register(listener, select.POLLIN)
         self.deploy_listener = listener
+        self.deploy_poller = poller
         print("Hermes deployment server started on port", DEPLOY_PORT)
+
+    def _poll_deployment(self):
+        if self.deploy_listener is None or self.deploy_poller is None:
+            return
+        try:
+            events = self.deploy_poller.poll(0)
+        except Exception as error:
+            print("Hermes deployment poll failed:", error)
+            return
+        for _source, event in events:
+            if not event & select.POLLIN:
+                continue
+            try:
+                self._accept_deployment(self.deploy_listener)
+            except OSError as error:
+                print("Hermes deployment accept failed:", error)
 
     def arm(self):
         self.badge_ip = wifi.get_ip()
@@ -174,6 +188,7 @@ class HermesBridgeApp(app.App):
             self._start_deployment_server()
         except Exception as error:
             print("Hermes Bridge failed to start:", error)
+            self.deploy_poller = None
             if self.deploy_listener:
                 self.deploy_listener.close()
                 self.deploy_listener = None
@@ -185,12 +200,15 @@ class HermesBridgeApp(app.App):
         return True
 
     def disarm(self):
-        global _active_bridge
+        if self.deploy_poller is not None and self.deploy_listener is not None:
+            try:
+                self.deploy_poller.unregister(self.deploy_listener)
+            except Exception:
+                pass
+        self.deploy_poller = None
         if self.deploy_listener:
             self.deploy_listener.close()
             self.deploy_listener = None
-        if _active_bridge is self:
-            _active_bridge = None
         self.armed = False
         self.status = "Disarmed"
 
@@ -206,6 +224,10 @@ class HermesBridgeApp(app.App):
             self.disarm()
             self.button_states.clear()
             self.terminate()
+            return
+
+        if self.armed:
+            self._poll_deployment()
 
     def draw(self, ctx):
         ctx.save()
